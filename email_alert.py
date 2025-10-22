@@ -2,7 +2,7 @@ import imaplib, email, smtplib, os, json
 from email.mime.text import MIMEText
 from email.utils import formatdate, parsedate_to_datetime
 from dotenv import load_dotenv
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 # ---------------- Config ----------------
 STATE_PATH = "state.json"
@@ -57,8 +57,20 @@ def send_alert(subject, count):
 def check_gmail():
     state = load_state()
     last_check_str = state.get("last_check")
-    last_check = datetime.fromisoformat(last_check_str) if last_check_str else datetime.now() - timedelta(hours=1)
-    now = datetime.now()
+    # Use timezone-aware datetimes (UTC) everywhere to avoid naive/aware comparisons
+    now = datetime.now(timezone.utc)
+    if last_check_str:
+        # parse and ensure timezone-aware (if naive, assume UTC)
+        try:
+            last_check = datetime.fromisoformat(last_check_str)
+        except Exception:
+            last_check = now - timedelta(hours=1)
+        if last_check.tzinfo is None:
+            last_check = last_check.replace(tzinfo=timezone.utc)
+        else:
+            last_check = last_check.astimezone(timezone.utc)
+    else:
+        last_check = now - timedelta(hours=1)
 
     print(f"\n[{now}] Checking emails from the past 1 hour...")
 
@@ -87,6 +99,13 @@ def check_gmail():
 
         try:
             email_date = parsedate_to_datetime(msg["Date"])
+            if email_date is None:
+                raise ValueError("no date")
+            # Normalize to UTC and ensure tz-aware
+            if email_date.tzinfo is None:
+                email_date = email_date.replace(tzinfo=timezone.utc)
+            else:
+                email_date = email_date.astimezone(timezone.utc)
         except Exception:
             email_date = now
 
@@ -105,7 +124,7 @@ def check_gmail():
         if count >= THRESHOLD:
             send_alert(subject, count)
 
-    # Save last check time
+    # Save last check time (ISO with timezone)
     state["last_check"] = now.isoformat()
     save_state(state)
     print(f"✅ Completed check at {now}. Exiting...")
