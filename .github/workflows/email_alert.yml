@@ -34,4 +34,4 @@ jobs:
           ALERT_EMAIL_RECIPIENT: ${{ secrets.ALERT_EMAIL_RECIPIENT }}
           SMTP_HOST: "smtp.gmail.com"
           SMTP_PORT: "587"
-        run: python gmail_alert_checker.py
+        run: python email_alert.py
